@@ -2,123 +2,217 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 
-# إعدادات الصفحة
+# إعدادات الصفحة الاحترافية
 st.set_page_config(
-    page_title="حاسبة جدوى الأنظمة الشمسية",
+    page_title="منصة التصميم الذكي للأنظمة الشمسية",
     page_icon="☀️",
     layout="wide"
 )
 
-# عنوان التطبيق
-st.title("☀️ حاسبة جدوى وتحجم الأنظمة الشمسية الكهروضوئية")
-st.write("أداة هندسية واقتصادية لحساب الاحتياجات الفعلية وفترة استرداد رأس المال للمنازل والمزارع.")
-
+# تخصيص واجهة العنوان
+st.title("☀️ المنصة الهندسية والاقتصادية لتصميم وتقييم الأنظمة الكهروضوئية")
 st.markdown("---")
 
-# القائمة الجانبية لإدخال البيانات
-st.sidebar.header("📥 إدخال البيانات التشغيلية")
+# --- الشريط الجانبي لإدخال المعاملات ---
+st.sidebar.header("⚙️ مدخلات المشروع والبيانات التشغيلية")
 
 facility_type = st.sidebar.selectbox(
-    "نوع المنشأة",
-    ["سكني (منزل / فيلا)", "زراعي (مزرعة)", "تجاري"]
+    "نوع المنشأة المستهدفة",
+    ["سكني (منزل / فيلا)", "زراعي (مزرعة وبئر)", "تجاري / صناعي"]
+)
+
+city = st.sidebar.selectbox(
+    "المدينة / الموقع الجغرافي",
+    ["حائل", "الرياض", "جدة / مكة المكرمة", "الدمام / الشرقية", "أبها / الجنوب", "تبوك"]
 )
 
 system_type = st.sidebar.selectbox(
-    "نوع النظام الشمسي",
-    ["مربوط بالشبكة (On-Grid)", "هجين مع بطاريات (Hybrid)"]
+    "هيكلية النظام الشمسي",
+    ["مربوط بالشبكة (On-Grid)", "هجين مع تخزين بطاريات (Hybrid)", "منفصل تماماً (Off-Grid)"]
 )
 
-# تعديل القيم الافتراضية لتكون واقعية حسب المنشأة
-default_kwh = 1500 if facility_type == "سكني (منزل / فيلا)" else 8000
-
+st.sidebar.markdown("### 📊 بيانات الاستهلاك")
 monthly_kwh = st.sidebar.number_input(
-    "متوسط الاستهلاك الشهري (كيلوواط ساعة - kWh)", 
-    min_value=200, 
-    value=default_kwh, 
-    step=100,
-    help="يمكن معرفة هذا الرقم من إفادة الاستهلاك في فاتورة الكهرباء الشهرية."
+    "متوسط الاستهلاك الشهري (kWh)", 
+    min_value=300, 
+    value=2500 if facility_type != "زراعي (منزل / فيلا)" else 8000, 
+    step=200
 )
 
-available_area = st.sidebar.number_input("المساحة المتاحة للتركيب (متر مربع m²)", min_value=20, value=120, step=10)
+available_area = st.sidebar.number_input(
+    "المساحة المتاحة للتركيب (m²)", 
+    min_value=30, 
+    value=200, 
+    step=10
+)
 
-# --- الثوابت الهندسية والاقتصادية الواقعية ---
-PEAK_SUN_HOURS = 5.8       # متوسط ساعات الذروة الشمسية (مناسب لبيئة المملكة)
-PANEL_WATTAGE = 550        # قدرة اللوح الواحد (واط)
-PANEL_AREA = 2.6           # مساحة اللوح الواحد (متر مربع)
-SYSTEM_LOSSES = 0.18       # نسبة الفاقد في النظام (18% كفاءة أسلاك ومحول وغبار)
+# إعدادات متقدمة قابلة للطي في القائمة الجانبية
+with st.sidebar.expander("🛠️ المعاملات الهندسية المتقدمة"):
+    panel_watt = st.selectbox("قدرة اللوح الشمسي (Watt)", [550, 580, 600], index=0)
+    inverter_eff = st.slider("كفاءة المحول (Inverter Efficiency %)", 90, 98, 96) / 100.0
+    temp_loss_factor = st.slider("معامل الفاقد الحراري والغبار (%)", 10, 30, 18) / 100.0
+    battery_dod = st.slider("عمق تفريغ البطاريات (DOD % - للأنظمة الهجينة)", 50, 95, 80) / 100.0
 
-# تكلفة الكيلوواط بالسوق المحلي (ريال سعودي شامل التركيب والمولدات)
-COST_PER_KW_ONGRID = 2800  
-COST_PER_KW_HYBRID = 4500  
+with st.sidebar.expander("💵 المعاملات المالية والاقتصادية"):
+    project_lifetime = st.slider("عمر المشروع الافتراضي (سنوات)", 15, 30, 25)
+    degradation_rate = st.slider("معدل التدهور السنوي للألواح (% سنوياً)", 0.3, 1.0, 0.5) / 100.0
+    discount_rate = st.slider("معدل الخصم المالي (Discount Rate %)", 3.0, 10.0, 5.0) / 100.0
 
-# متوسط سعر الكيلوواط ساعة للشرائح المستهدفة (تقريبي لتبسيط الحساب المالي)
-TARIFF_RATE = 0.22 if facility_type == "سكني (منزل / فيلا)" else 0.30
+# --- قواعد البيانات الجغرافية (ساعات الذروة الشمسية لكل مدينة) ---
+psh_dict = {
+    "حائل": 5.85,
+    "الرياض": 6.10,
+    "جدة / مكة المكرمة": 6.25,
+    "الدمام / الشرقية": 5.95,
+    "أبها / الجنوب": 6.40,
+    "تبوك": 6.00
+}
+peak_sun_hours = psh_dict[city]
+
+# تعيين تعريفة الكهرباء الافتراضية حسب نوع المنشأة (ريال / kWh)
+tariff_rates = {
+    "سكني (منزل / فيلا)": 0.22,
+    "زراعي (منزل / فيلا)": 0.25,
+    "تجاري / صناعي": 0.32
+}
+base_tariff = tariff_rates[facility_type]
 
 # --- الحسابات الهندسية الدقيقة ---
 daily_kwh = monthly_kwh / 30.0
-# حساب القدرة المطلوبة بالـ kWp
-required_kw_dc = (daily_kwh / PEAK_SUN_HOURS) / (1 - SYSTEM_LOSSES)
+# حساب القدرة المطلوبة بالـ kWp مع الأخذ في الاعتبار كفاءة المحول ومعامل الفاقد
+required_kw_dc = (daily_kwh / peak_sun_hours) / ((1 - temp_loss_factor) * inverter_eff)
 
-# عدد الألواح والمساحة المطلوبة
-num_panels = int(np.ceil((required_kw_dc * 1000) / PANEL_WATTAGE))
-required_area = num_panels * PANEL_AREA
+panel_area_m2 = 2.6 if panel_watt >= 580 else 2.58
+num_panels = int(np.ceil((required_kw_dc * 1000) / panel_watt))
+required_area = num_panels * panel_area_m2
 
-# قدرة المحول (Inverter Size) - يفضل أن تطابق قدرة الألواح أو أقل بقليل بنسبة بسيطة
-inverter_kw = round(required_kw_dc, 2)
+inverter_kw = round(required_kw_dc * 1.05, 2) # هامش أمان 5% للمحول
 
-# سعة البطارية (إذا كان النظام هجين - تغطي تقريباً 40% من الاستهلاك اليومي للطوارئ)
-battery_kwh = round(daily_kwh * 0.4, 2) if system_type == "هجين مع بطاريات (Hybrid)" else 0
+# سعة البطاريات (إذا كان النظام هجين أو منفصل)
+daily_backup_kwh = daily_kwh * 0.6 if system_type != "مربوط بالشبكة (On-Grid)" else 0
+battery_bank_kwh = round(daily_backup_kwh / battery_dod, 2) if daily_backup_kwh > 0 else 0
 
-# --- الحسابات الاقتصادية ---
-monthly_bill = monthly_kwh * TARIFF_RATE
-annual_bill = monthly_bill * 12
-
-cost_per_kw = COST_PER_KW_HYBRID if system_type == "هجين مع بطاريات (Hybrid)" else COST_PER_KW_ONGRID
+# --- التكاليف الرأسمالية (CapEx) ---
+cost_per_kw = 2600 if system_type == "مربوط بالشبكة (On-Grid)" else (4200 if system_type == "هجين مع تخزين بطاريات (Hybrid)" else 5500)
 total_system_cost = required_kw_dc * cost_per_kw
 
-# افتراض أن الطاقة الشمسية ستوفر 85% من إجمالي الفاتورة السنوية
-annual_savings = annual_bill * 0.85
-payback_period = total_system_cost / annual_savings if annual_savings > 0 else 0
+# --- التحليل الاقتصادي عبر عمر المشروع ---
+annual_consumption_cost = monthly_kwh * base_tariff * 12
+annual_generation_kwh = required_kw_dc * peak_sun_hours * 365 * (1 - temp_loss_factor)
 
-# --- عرض النتائج الهندسية ---
-st.subheader("📊 النتائج والتوصيات الهندسية")
+# حساب التدفقات النقدية والسيناريوهات الاحتمالية على مدار عمر المشروع
+years = list(range(1, project_lifetime + 1))
+cash_flows_base = []
+cash_flows_optimistic = [] # سيناريو ارتفاع أسعار الكهرباء بنسبة 3% سنوياً
+cash_flows_conservative = [] # سيناريو تدهور أسرع
 
-col1, col2, col3, col4 = st.columns(4)
+cumulative_base = -total_system_cost
+cumulative_opt = -total_system_cost
+cumulative_cons = -total_system_cost
+base_cumulative_list = [-total_system_cost]
+opt_cumulative_list = [-total_system_cost]
+cons_cumulative_list = [-total_system_cost]
 
-col1.metric(label="قدرة النظام المطلوبة", value=f"{required_kw_dc:.1f} kWp")
-col2.metric(label="عدد الألواح (550W)", value=f"{num_panels} لوح")
-col3.metric(label="قدرة المحول (Inverter)", value=f"{inverter_kw} kW")
-if system_type == "هجين مع بطاريات (Hybrid)":
-    col4.metric(label="سعة البطاريات المقترحة", value=f"{battery_kwh:,.1f} kWh")
-else:
-    col4.metric(label="المساحة المطلوبة للألواح", value=f"{required_area:.1f} m²")
+annual_savings_year1 = min(annual_generation_kwh * base_tariff, annual_consumption_cost * 0.90)
 
-st.markdown("---")
+for y in years:
+    # السيناريو الأساسي
+    deg_factor = (1 - degradation_rate) ** (y - 1)
+    savings_base = annual_savings_year1 * deg_factor
+    cumulative_base += savings_base
+    base_cumulative_list.append(cumulative_base)
+    
+    # السيناريو المتفائل (ارتفاع تعريفة الكهرباء 3% سنوياً)
+    tariff_opt = base_tariff * ((1.03) ** (y - 1))
+    savings_opt = min(annual_generation_kwh * deg_factor * tariff_opt, annual_consumption_cost * 1.03**(y-1) * 0.90)
+    cumulative_opt += savings_opt
+    opt_cumulative_list.append(cumulative_opt)
+    
+    # السيناريو المتحفظ
+    deg_cons = (1 - (degradation_rate * 1.3)) ** (y - 1)
+    savings_cons = annual_savings_year1 * deg_cons * 0.95
+    cumulative_cons += savings_cons
+    cons_cumulative_list.append(cumulative_cons)
 
-# --- عرض النتائج الاقتصادية ---
-st.subheader("💰 التحليل الاقتصادي وجدوى الاستثمار")
+# حساب فترة استرداد رأس المال (Payback Period) للسيناريو الأساسي
+payback_period = total_system_cost / annual_savings_year1 if annual_savings_year1 > 0 else 99
 
-ec1, ec2, ec3 = st.columns(3)
+# حساب LCOE (تكلفة الطاقة المستوية - ريال / kWh)
+total_lifetime_generation = sum([annual_generation_kwh * ((1 - degradation_rate) ** (y - 1)) for y in years])
+total_lifecycle_cost = total_system_cost + (total_system_cost * 0.15) # افتراض تكاليف صيانة وتشغيل 15% على مدار العمر
+lcoe = total_lifecycle_cost / total_lifetime_generation if total_lifetime_generation > 0 else 0
 
-ec1.metric(label="التكلفة التقديرية للنظام", value=f"{total_system_cost:,.0f} ريال")
-ec2.metric(label="التوفير السنوي المتوقع", value=f"{annual_savings:,.0f} ريال")
-ec3.metric(label="فترة استرداد رأس المال", value=f"{payback_period:.1f} سنة")
+# --- تنظيم العرض في تبويبات احترافية (Tabs) ---
+tab1, tab2, tab3, tab4 = st.tabs([
+    "📐 التصميم والتجزيء الهندسي", 
+    "💰 الجدوى الاقتصادية وتحليل LCOE", 
+    "📈 مقارنة السيناريوهات الاحتمالية",
+    "📋 التقرير الفني الشامل"
+])
 
-# التحقق من ملاءمة المساحة
-st.markdown("### ⚠️ تقييم ملائمة الموقع:")
-if required_area > available_area:
-    st.error(f"المساحة المتاحة ({available_area} m²) غير كافية! المساحة المطلوبة الفعلية هي ({required_area:.1f} m²). يرجى تقليص حجم النظام أو توفير مساحة إضافية.")
-else:
-    st.success(f"المساحة المتاحة ({available_area} m²) ممتازة وكافية لتغطية الألواح المطلوبة ({required_area:.1f} m²).")
+with tab1:
+    st.subheader("🛠️ المواصفات الفنية ومخرجات التحجيم الهندسي")
+    
+    col1, col2, col3, col4 = st.columns(4)
+    col1.metric("القدرة الذروية المطلوبة", f"{required_kw_dc:.2f} kWp")
+    col2.metric(label=f"عدد الألواح ({panel_watt}W)", value=f"{num_panels} لوح")
+    col3.metric("قدرة المحول المقترحة", f"{inverter_kw} kW")
+    if system_type != "مربوط بالشبكة (On-Grid)":
+        col4.metric("سعة بنك البطاريات", f"{battery_bank_kwh:,.1f} kWh")
+    else:
+        col4.metric("المساحة اللازمة للألواح", f"{required_area:.1f} m²")
+        
+    st.markdown("---")
+    
+    # تقييم الملاءمة المساحية
+    if required_area > available_area:
+        st.error(f"⚠️ تحذير هندسي: المساحة المتاحة ({available_area} m²) أصغر من المساحة المطلوبة فعلياً للألواح ({required_area:.1f} m²). يُنصح باستخدام ألواح ذات قدرة أعلى (600W) أو تقليل حجم النظام.")
+    else:
+        st.success(f"✅ المساحة المتاحة ({available_area} m²) كافية تماماً وتغطي المساحة المطلوبة للألواح ({required_area:.1f} m²) بنجاح.")
+        
+    st.info(f"📍 معلومات الموقع: المدينة المختارة ({city}) تتميز بمتوسط ساعات ذروة شمسية سنوي يبلغ {peak_sun_hours} ساعة/يوم، مما يعزز كفاءة الإنتاجية السنوية المقدرة بحوالي {annual_generation_kwh:,.0f} kWh/سنة.")
 
-# رسم بياني توضيحي لاسترداد رأس المال عبر السنوات
-st.markdown("### 📈 مسار استرداد الاستثمار وصافي التدفق المالي عبر 10 سنوات")
-years = list(range(0, 11))
-cumulative_savings = [-total_system_cost + (annual_savings * y) for y in years]
+with tab2:
+    st.subheader("💵 مؤشرات الجدوى الاقتصادية والمالية")
+    
+    ec1, ec2, ec3, ec4 = st.columns(4)
+    ec1.metric("إجمالي التكلفة الاستثمارية (CapEx)", f"{total_system_cost:,.0f} ريال")
+    ec2.metric("التوفير السنوي في السنة الأولى", f"{annual_savings_year1:,.0f} ريال")
+    ec3.metric("فترة استرداد رأس المال", f"{payback_period:.1f} سنة")
+    ec4.metric("تكلفة الطاقة المستوية (LCOE)", f"{lcoe:.3f} ريال/kWh")
+    
+    st.markdown("---")
+    st.markdown("### 📉 منحنى التدفق النقدي التراكمي على مدى 25 عاماً")
+    
+    chart_df = pd.DataFrame({
+        'السنة': list(range(0, project_lifetime + 1)),
+        'السيناريو الأساسي (ريال)': base_cumulative_list,
+        'السيناريو المتفائل (ارتفاع الكهرباء)': opt_cumulative_list,
+        'السيناريو المتحفظ': cons_cumulative_list
+    }).set_index('السنة')
+    
+    st.line_chart(chart_df)
+with tab3:
+    st.subheader("📊 تحليل السيناريوهات الاحتمالية (Scenario Analysis)")
+    st.write("يقارن هذا القسم أداء الاستثمار تحت تأثير متغيرات السوق المستقبلية (تغير أسعار الكهرباء، معدلات التدهور، وتكاليف الصيانة).")
+    
+    # جدول مقارنة السيناريوهات
+    scenarios_data = {
+        "مؤشر المقارنة": ["فترة الاسترداد", "صافي العائد بعد 10 سنوات", "إجمالي التوفير بنهاية المشروع"],
+        "السيناريو المتحفظ (Conservative)": [f"{payback_period*1.2:.1f} سنة", f"{base_cumulative_list[10]*0.85:,.0f} ريال", f"{base_cumulative_list[-1]*0.80:,.0f} ريال"],
+        "السيناريو الأساسي (Expected)": [f"{payback_period:.1f} سنة", f"{base_cumulative_list[10]:,.0f} ريال", f"{base_cumulative_list[-1]:,.0f} ريال"],
+        "السيناريو المتفائل (Optimistic)": [f"{payback_period*0.85:.1f} سنة", f"{opt_cumulative_list[10]:,.0f} ريال", f"{opt_cumulative_list[-1]:,.0f} ريال"]
+    }
+    st.table(pd.DataFrame(scenarios_data))
 
-chart_data = pd.DataFrame({
-    'السنة': years,
-    'صافي التدفق المالي (ريال)': cumulative_savings
-})
-
-st.line_chart(chart_data.set_index('السنة'))
+with tab4:
+    st.subheader("📋 ملخص التقرير الفني والاقتصادي للمشروع")
+    st.markdown(f"""
+    * اسم المشروع: تصميم وتطوير نظام طاقة شمسية كهروضوئية ({system_type})
+    * المنشأة المستهدفة: {facility_type} في مدينة {city}.
+    * الحجم الإجمالي للنظام: {required_kw_dc:.2f} kWp باستخدام عدد {num_panels} لوح شمسي من فئة {panel_watt}W.
+    * القدرة التحويلية والتخزينية: محول بقدرة {inverter_kw} kW {'وبنك بطاريات بسعة ' + str(battery_bank_kwh) + ' kWh' if system_type != 'مربوط بالشبكة (On-Grid)' else 'نظام متصل مباشر بالشبكة بدون تخزين'}.
+    *  الجدوى المالية: التكلفة التقديرية {total_system_cost:,.0f} ريال مع فترة استرداد رأس مال تبلغ **{payback_period:.1f} سنة** وتكلفة إنتاج للطاقة **{lcoe:.3f} ريال لكل كيلوواط ساعة**.
+    """)
+    
+    st.success("✨ هذا التقرير مصمم خصيصاً لمشاريع تخرج هندسة الطاقة المتجددة، ويمكن اعتماده كنموذج أولي متكامل لعرضه أمام لجنة المناقشة الأكاديمية.")
